@@ -16,7 +16,7 @@
 // Pin A4 works on the Adafruit Metro M4 (if using the Adafruit RGB
 // Matrix Shield, cut trace between CLK pads and run a wire to A4).
 
-#define CLK  8   // USE THIS ON ADAFRUIT METRO M0, etc.
+//#define CLK  8   // USE THIS ON ADAFRUIT METRO M0, etc.
 //#define CLK A4 // USE THIS ON METRO M4 (not M0)
 #define CLK 11 // USE THIS ON ARDUINO MEGA
 #define OE   9
@@ -31,7 +31,14 @@
 #define resetPin 18
 
 int resultCounter = 0;
-int countDownSeconds = 600;
+int countDownSeconds = 0;
+int timerOptionA = 600;
+int timerOptionB = 1800;
+int timerOptionC = 3600;
+
+int sessionTimer = 0;
+
+int stateMachine = 0;
 
 
 RGBmatrixPanel matrix(A, B, C, D, CLK, LAT, OE, false, 64);
@@ -50,21 +57,57 @@ uint16_t Wheel(byte WheelPos) {
 }
 
 void clearResultScreen(){
-    matrix.fillRect(0, 0, matrix.width(), 16, matrix.Color333(0, 0, 0));
+  matrix.fillRect(0, 0, matrix.width(), 16, matrix.Color333(0, 0, 0));
 }
 void clearTimerScreen(){
-    matrix.fillRect(0, 17, matrix.width(), 32, matrix.Color333(0,0,0));
+  matrix.fillRect(0, 17, matrix.width(), 32, matrix.Color333(0,0,0));
 }
+void clearScreen(){
+  matrix.fillRect(0,0, matrix.width(), matrix.height(), matrix.Color333(0,0,0));
+}
+
+void printTime(){
+  if (countDownSeconds != 0){
+      matrix.setCursor(0,17);
+      matrix.setTextSize(2);
+      matrix.setTextColor(matrix.Color333(0,0,7));
+      matrix.print(String(countDownSeconds / 60));
+      matrix.print(':');
+      if (countDownSeconds % 60 < 10){
+        matrix.print('0');
+      }
+
+      matrix.print(String(countDownSeconds % 60));
+  }
+  else {
+      matrix.setCursor(0,17);
+      matrix.setTextSize(2);
+      matrix.setTextColor(matrix.Color333(0,0,7));
+      matrix.print("Time");
+      countDownSeconds = 0;
+  }
+  }
+
+
+
 void addResult() {
     static unsigned long last_interrupt_time = 0;
     unsigned long interrupt_time = millis();
     if (interrupt_time - last_interrupt_time > 500){
+      if(stateMachine == 2){
         resultCounter++;
         clearResultScreen();
         matrix.setTextColor(matrix.Color333(7,0,0));
         matrix.setCursor(0, 0);
         matrix.setTextSize(2);
         matrix.print(String(resultCounter));
+      }
+      else{
+        countDownSeconds = timerOptionA;
+        sessionTimer = timerOptionA;
+        stateMachine = 1;
+        clearScreen();
+      }
     }
     last_interrupt_time = interrupt_time;
 }
@@ -72,12 +115,20 @@ void removeResult(){
     static unsigned long last_interrupt_time = 0;
     unsigned long interrupt_time = millis();
     if (interrupt_time - last_interrupt_time > 500){
+      if(stateMachine == 2){
         resultCounter--;
         clearResultScreen();
         matrix.setTextColor(matrix.Color333(7,0,0));
         matrix.setCursor(0, 0);
         matrix.setTextSize(2);
         matrix.print(String(resultCounter));
+      }
+      else{
+        countDownSeconds = timerOptionB;
+        sessionTimer = timerOptionB;
+        stateMachine = 1;
+        clearScreen();
+      }
     }
     last_interrupt_time = interrupt_time;
 }
@@ -85,12 +136,28 @@ void resetResults(){
     static unsigned long last_interrupt_time = 0;
     unsigned long interrupt_time = millis();
     if (interrupt_time - last_interrupt_time > 500){
+      if ((stateMachine == 1) || (stateMachine == 2)){
         resultCounter = 0;
-        clearResultScreen();
+        countDownSeconds = sessionTimer;
+        clearScreen();
+        printTime();
         matrix.setTextColor(matrix.Color333(7,0,0));
         matrix.setCursor(0, 0);
         matrix.setTextSize(2);
         matrix.print(String(resultCounter));
+        if(stateMachine == 2){
+          stateMachine = 1;
+        }
+        else{
+          stateMachine = 2;
+        }
+      }
+      else{
+        countDownSeconds = timerOptionC;
+        sessionTimer = timerOptionC;
+        stateMachine = 1;
+        clearScreen();
+      }
     }
     last_interrupt_time = interrupt_time;
 }
@@ -100,8 +167,9 @@ void resetResults(){
 void setup() {
 
 
-
+  Serial.begin(9600);
   matrix.begin();
+  Serial.print(stateMachine);
 
   pinMode(upPin, INPUT_PULLUP);
   pinMode(downPin, INPUT_PULLUP);
@@ -113,6 +181,27 @@ void setup() {
 
     // fill the screen with 'black'
   matrix.fillScreen(matrix.Color333(0, 0, 0));
+
+  matrix.setCursor(0,0);
+  matrix.setTextColor(matrix.Color333(7,7,7));
+  matrix.setTextSize(1);
+  matrix.print("Set timer");
+
+  matrix.setCursor(0,17);
+  matrix.setTextColor(matrix.Color333(0,7,7));
+  matrix.print("A)");
+
+  matrix.setCursor(21,17);
+  matrix.setTextColor(matrix.Color333(7,0,7));
+  matrix.print("B)");
+
+  matrix.setCursor(42,17);
+  matrix.setTextColor(matrix.Color333(7,7,0));
+  matrix.print("C)");
+
+  
+
+
  /*
   // draw a pixel in solid white
   matrix.drawPixel(0, 0, matrix.Color333(7, 7, 7));
@@ -191,31 +280,35 @@ void setup() {
 }
 
 void loop() {
-  delay(1000);
-  noInterrupts();
-  clearTimerScreen();
-  if (countDownSeconds != 0){
+  if(stateMachine == 2){
+    Serial.print(stateMachine);
+
+    noInterrupts();
+    clearTimerScreen();
+    printTime();
     countDownSeconds--;
+    interrupts();
+    Serial.print("i am here");
+    delay(1000);
+  }
+  else if(stateMachine == 1){
+    Serial.print(stateMachine);
+    clearScreen();
+    matrix.setCursor(0,0);
+    matrix.setTextColor(matrix.Color333(7,7,7));
+    matrix.setTextSize(1);
+    matrix.print("Press:");
     matrix.setCursor(0,17);
-    matrix.setTextSize(2);
-    matrix.setTextColor(matrix.Color333(0,0,7));
-    matrix.print(String(countDownSeconds / 60));
-    matrix.print(':');
-    if (countDownSeconds % 60 < 10){
-      matrix.print('0');
+    matrix.print("Reset");
+    while (stateMachine == 1)
+    {
+      delay(1000);
+      Serial.print(stateMachine);
     }
-    matrix.print(String(countDownSeconds % 60));
-  }
-  else {
-    matrix.setCursor(0,17);
-    matrix.setTextSize(2);
-    matrix.setTextColor(matrix.Color333(0,0,7));
-    matrix.print("Time");
-    countDownSeconds = 0;
-  }
+    
 
-  interrupts();
-
+  }
+  Serial.print(stateMachine);
 }
 
 
